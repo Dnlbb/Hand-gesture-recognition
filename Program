@@ -1,0 +1,101 @@
+import json
+
+file_path = '/home/daniil/Документы/like.json'
+
+
+with open(file_path, 'r') as file:
+    like_dataset = json.load(file)
+
+sample_key = next(iter(like_dataset.keys()))
+like_dataset[sample_key]
+
+landmark_lengths = []
+
+for key, value in like_dataset.items():
+    if value['labels'] and value['landmarks']:
+        for landmarks in value['landmarks']:
+            landmark_lengths.append(len(landmarks))
+
+
+unique_lengths = set(landmark_lengths)
+unique_lengths
+
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
+import numpy as np
+
+
+cleaned_features = []
+cleaned_labels = []
+
+for key, value in like_dataset.items():
+    if value['labels'] and value['landmarks']:
+        index = 0 if value['leading_hand'] == 'left' else 1
+        if index < len(value['landmarks']) and len(value['landmarks'][index]) == 21:
+            cleaned_features.append(np.array(value['landmarks'][index]).flatten())
+            cleaned_labels.append(1 if 'like' in value['labels'][index] else 0)
+
+cleaned_features = np.array(cleaned_features)
+cleaned_labels = np.array(cleaned_labels)
+
+X_train_cleaned, X_test_cleaned, y_train_cleaned, y_test_cleaned = train_test_split(
+    cleaned_features, cleaned_labels, test_size=0.25, random_state=42)
+
+
+model_rf = RandomForestClassifier(n_estimators=100, random_state=42)
+model_rf.fit(X_train_cleaned, y_train_cleaned)
+
+
+accuracy_rf = model_rf.score(X_test_cleaned, y_test_cleaned)
+accuracy_rf
+
+
+import cv2
+import mediapipe as mp
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+
+
+mp_drawing = mp.solutions.drawing_utils
+mp_hands = mp.solutions.hands
+
+
+cap = cv2.VideoCapture(0)
+with mp_hands.Hands(
+    model_complexity=0,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5) as hands:
+    while cap.isOpened():
+        success, image = cap.read()
+        if not success:
+            print("Игнорирование пустого кадра камеры.")
+            continue
+
+        image.flags.writeable = False
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        results = hands.process(image)
+
+       
+        image.flags.writeable = True
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        if results.multi_hand_landmarks:
+            for hand_landmarks in results.multi_hand_landmarks:
+                landmarks = np.array([[lm.x, lm.y] for lm in hand_landmarks.landmark]).flatten().reshape(1, -1)
+                gesture_prediction = model_rf.predict(landmarks)
+                gesture_label = '+' if gesture_prediction == 1 else '-'
+
+               
+                mp_drawing.draw_landmarks(
+                    image,
+                    hand_landmarks,
+                    mp_hands.HAND_CONNECTIONS)
+                cv2.putText(image, gesture_label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
+    
+        cv2.imshow('MediaPipe Hands', cv2.flip(image, 1))
+        if cv2.waitKey(5) & 0xFF == 27:
+            break
+
+cap.release()
+cv2.destroyAllWindows()
