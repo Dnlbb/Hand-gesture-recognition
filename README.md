@@ -22,6 +22,7 @@ To run this project, you need to install the required Python libraries. You can 
 
 ```bash
 pip install opencv-python-headless mediapipe numpy scikit-learn
+```
 
 ## Project Structure
 
